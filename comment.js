@@ -1,3 +1,4 @@
+```javascript
 /**
  * comments.js — Module bình luận cho KTuongFX
  * Backend: Cloudflare Worker proxy -> GitHub Issues (xem worker.js)
@@ -10,6 +11,9 @@ const Comments = {
     // State nội bộ: slug phim đang xem + đang reply cho comment nào (null = không reply)
     currentSlug: null,
     replyingTo: null,
+
+    // [CHỐNG SPAM] Cờ kiểm soát trạng thái đang gửi API
+    isSubmitting: false,
 
     // Lấy tên đã lưu trước đó (nếu có) để user không phải gõ lại mỗi lần
     getSavedName: () => localStorage.getItem('ktfx_comment_name') || '',
@@ -129,13 +133,13 @@ const Comments = {
     renderForm: () => {
         const savedName = Comments.getSavedName();
         return `
-        <div class="bg-surface rounded-2xl p-4 border border-white/5 mb-4">
+        <div class="bg-surface rounded-2xl p-4 border border-white/5 mb-4 shadow-md">
             <input id="comment-name-input" type="text" placeholder="Tên hiển thị của bạn"
                    value="${savedName}"
-                   class="w-full bg-app border border-white/10 rounded-xl px-3 py-2 text-sm text-white mb-2 focus:outline-none focus:border-primary">
+                   class="w-full bg-app border border-white/10 rounded-xl px-3 py-2 text-sm text-white mb-2 focus:outline-none focus:border-primary transition">
             <textarea id="comment-message-input" placeholder="Viết bình luận..." rows="2"
-                      class="w-full bg-app border border-white/10 rounded-xl px-3 py-2 text-sm text-white mb-2 focus:outline-none focus:border-primary"></textarea>
-            <button onclick="Comments.submit()" class="bg-primary text-black font-bold text-sm px-4 py-2 rounded-xl hover:bg-primary-dark">
+                      class="w-full bg-app border border-white/10 rounded-xl px-3 py-2 text-sm text-white mb-2 focus:outline-none focus:border-primary transition"></textarea>
+            <button id="comment-submit-btn" onclick="Comments.submit()" class="bg-primary text-black font-bold text-sm px-4 py-2 rounded-xl hover:bg-primary-dark transition">
                 Gửi bình luận
             </button>
         </div>`;
@@ -152,11 +156,17 @@ const Comments = {
 
         const list = await Comments.fetchComments(slug);
         Comments.lastLoadedList = list; // lưu lại để tránh gọi lại API khi chỉ toggle reply
-        document.getElementById('comments-list').innerHTML = Comments.renderAll(list);
+        const commentsListEl = document.getElementById('comments-list');
+        if (commentsListEl) {
+            commentsListEl.innerHTML = Comments.renderAll(list);
+        }
     },
 
     // Gửi bình luận gốc (không reply)
     submit: async () => {
+        // [CHỐNG SPAM] Chặn gửi trùng lặp khi tiến trình cũ chưa chạy xong
+        if (Comments.isSubmitting) return;
+
         const nameInput = document.getElementById('comment-name-input');
         const msgInput = document.getElementById('comment-message-input');
         const name = nameInput.value.trim();
@@ -166,7 +176,17 @@ const Comments = {
             alert('Vui lòng nhập tên và nội dung bình luận.');
             return;
         }
+
+        Comments.isSubmitting = true;
         Comments.saveName(name); // nhớ tên cho lần sau
+
+        // Thay đổi giao diện nút gửi để báo cho người dùng
+        const submitBtn = document.getElementById('comment-submit-btn');
+        if (submitBtn) {
+            submitBtn.disabled = true;
+            submitBtn.innerText = 'Đang gửi...';
+            submitBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        }
 
         try {
             await Comments.postComment(Comments.currentSlug, name, message, null);
@@ -174,6 +194,14 @@ const Comments = {
             await Comments.init(Comments.currentSlug); // tải lại danh sách mới nhất
         } catch (e) {
             alert('Gửi bình luận thất bại, thử lại sau.');
+        } finally {
+            // [MỞ KHÓA] Reset trạng thái sau khi hoàn thành
+            Comments.isSubmitting = false;
+            if (submitBtn) {
+                submitBtn.disabled = false;
+                submitBtn.innerText = 'Gửi bình luận';
+                submitBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
         }
     },
 
@@ -191,21 +219,40 @@ const Comments = {
                        class="w-full bg-surface border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white mb-2">
                 <textarea id="reply-msg-${parentId}" placeholder="Trả lời ${parentName}..." rows="2"
                           class="w-full bg-surface border border-white/10 rounded-lg px-2 py-1.5 text-xs text-white mb-2"></textarea>
-                <button onclick="Comments.submitReply(${parentId})" class="bg-primary text-black text-xs font-bold px-3 py-1.5 rounded-lg">Gửi</button>
+                <button id="reply-submit-btn-${parentId}" onclick="Comments.submitReply(${parentId})" class="bg-primary text-black text-xs font-bold px-3 py-1.5 rounded-lg">Gửi</button>
             </div>`;
     },
 
     submitReply: async (parentId) => {
+        // [CHỐNG SPAM] Khóa nút gửi Reply trùng lặp
+        if (Comments.isSubmitting) return;
+
         const name = document.getElementById(`reply-name-${parentId}`).value.trim();
         const message = document.getElementById(`reply-msg-${parentId}`).value.trim();
         if (!name || !message) { alert('Vui lòng nhập tên và nội dung.'); return; }
+        
+        Comments.isSubmitting = true;
         Comments.saveName(name);
+
+        const replyBtn = document.getElementById(`reply-submit-btn-${parentId}`);
+        if (replyBtn) {
+            replyBtn.disabled = true;
+            replyBtn.innerText = 'Đang gửi...';
+            replyBtn.classList.add('opacity-50', 'cursor-not-allowed');
+        }
 
         try {
             await Comments.postComment(Comments.currentSlug, name, message, parentId);
             await Comments.init(Comments.currentSlug);
         } catch (e) {
             alert('Gửi phản hồi thất bại, thử lại sau.');
+        } finally {
+            Comments.isSubmitting = false;
+            if (replyBtn) {
+                replyBtn.disabled = false;
+                replyBtn.innerText = 'Gửi';
+                replyBtn.classList.remove('opacity-50', 'cursor-not-allowed');
+            }
         }
     },
 
@@ -229,3 +276,6 @@ const Comments = {
         icon.textContent = isHidden ? '▴' : '▾';
     }
 };
+
+```
+            
