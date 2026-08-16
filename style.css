@@ -1,0 +1,700 @@
+        /* TỐI ƯU VUỐT CHẠM ĐIỆN THOẠI */
+        .hide-scrollbar::-webkit-scrollbar { display: none; }
+        .hide-scrollbar { 
+            -ms-overflow-style: none; 
+            scrollbar-width: none; 
+            -webkit-overflow-scrolling: touch; 
+            overscroll-behavior-x: contain;
+            /* TỐI ƯU: gợi ý trình duyệt tạo layer riêng cho vùng cuộn ngang, cuộn/vuốt chạy trên
+               compositor thay vì phải vẽ lại (repaint) mỗi frame -> đỡ khựng khi vuốt nhanh. */
+            will-change: scroll-position;
+            transform: translateZ(0);
+        }
+        .hide-scrollbar > * { 
+            /* Mỗi thẻ phim là 1 layer hợp thành riêng, tránh việc cả dòng phải vẽ lại chung khi
+               chỉ 1 thẻ đổi ảnh/hover, giúp thao tác vuốt mượt hơn trên máy yếu. */
+            backface-visibility: hidden;
+        }
+
+        /* TỐI ƯU (v90): trang chủ dựng sẵn TOÀN BỘ các dòng phim (~15-20 dòng) vào DOM cùng lúc
+           qua 1 lần innerHTML =, kể cả những dòng còn nằm rất xa bên dưới màn hình. Nếu không có
+           content-visibility, trình duyệt vẫn phải layout + paint hết các dòng đó ngay từ đầu,
+           và phải tính lại (composite) mỗi khi cuộn/vuốt dù người dùng chưa nhìn thấy -> khựng.
+           content-visibility: auto giúp trình duyệt "bỏ qua" hoàn toàn việc layout/paint cho các
+           section đang ở ngoài viewport (gần như ảo hoá danh sách mà không cần viết lại logic
+           render), chỉ khi cuộn tới gần nó mới thực sự dựng ra. contain-intrinsic-size giữ chỗ
+           chiều cao ước lượng để thanh cuộn không bị nhảy giật khi các section được bật/tắt. */
+        .cv-row {
+            content-visibility: auto;
+            contain-intrinsic-size: 0 380px;
+        }
+        
+        body { 
+            background-color: #0f111a; color: #f1f1f1; 
+            /* ĐỔI GIAO DIỆN (v8 - reskin theo ChoPhim): Be Vietnam Pro thay Baloo 2 */
+            font-family: 'Be Vietnam Pro', system-ui, -apple-system, sans-serif; 
+            -webkit-tap-highlight-color: transparent;
+            overscroll-behavior-y: none;
+        }
+        /* THÊM MỚI (v8): font hiển thị Tektur — dùng cho tiêu đề hero/logo chữ ở các bước reskin
+           tiếp theo (chưa áp dụng ở đâu trong bước này, chỉ khai báo sẵn class). */
+        .font-display { font-family: 'Tektur', 'Be Vietnam Pro', sans-serif; }
+
+        .tab-active { color: #FFC24B; border-bottom: 2px solid #FFC24B; }
+        .bottom-sheet-open { transform: translateY(0%); }
+        .bottom-sheet-closed { transform: translateY(100%); }
+        
+        @media (min-width: 640px) {
+            .bottom-sheet-open { transform: scale(1); opacity: 1; pointer-events: auto;}
+            .bottom-sheet-closed { transform: scale(0.95); opacity: 0; pointer-events: none; }
+        }
+        
+        .line-clamp-3 { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+        .line-clamp-2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+        .line-clamp-1 { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+
+        /* ===== GIAO DIỆN SỐ TOP 10 NETFLIX ===== */
+        .netflix-number {
+            font-family: 'Arial Black', Helvetica, Impact, sans-serif;
+            font-weight: 900;
+            font-size: 5rem;
+            line-height: 0.8;
+            color: #15141F;
+            -webkit-text-stroke: 2px rgba(255,255,255,0.7);
+            text-shadow: 0 4px 10px rgba(0,0,0,0.5);
+            pointer-events: none;
+            user-select: none;
+            letter-spacing: -2px;
+            z-index: 5;
+            flex-shrink: 0;
+            transform: translateY(2px);
+        }
+        .netflix-number.double-digit {
+            font-size: 4rem;
+            letter-spacing: -4px;
+        }
+        /* THÊM MỚI (v13): số thứ hạng thu nhỏ riêng cho card ngang 16:9 (Top 10 trang chủ) — khung
+           ngắn hơn khung dọc 2:3 nên số to như cũ sẽ tràn ra ngoài card. */
+        .netflix-number-sm { font-size: 3rem; }
+        .netflix-number-sm.double-digit { font-size: 2.5rem; }
+        @media (min-width: 768px) {
+            .netflix-number-sm { font-size: 3.6rem; }
+            .netflix-number-sm.double-digit { font-size: 3rem; }
+        }
+        @media (min-width: 768px) {
+            .netflix-number { font-size: 6.5rem; }
+            .netflix-number.double-digit { font-size: 5.2rem; }
+        }
+
+        /* ===== BADGE XU HƯỚNG ===== */
+        .trend-badge { display:inline-flex; align-items:center; gap:2px; font-size:10px; font-weight:700; padding:2px 6px; border-radius:6px; }
+        .trend-up { background: rgba(34,197,94,0.15); color: #4ade80; }
+        .trend-down { background: rgba(248,113,113,0.15); color: #f87171; }
+        .trend-flat { background: rgba(148,163,184,0.15); color: #94a3b8; }
+
+        /* ===== BADGE LỒNG TIẾNG (VS/TM/LT) — màu chức năng, tách hẳn nhóm màu brand/trang trí =====
+           ĐỔI GIAO DIỆN (v12 - reskin theo ChoPhim): pill chunkier hơn (giống ep-badge của demo),
+           giữ nguyên bảng màu cũ (đã khớp sẵn với demo: TM xanh lá #2ca35d, LT xanh lam #3b82f6). */
+        .lang-badge { display:inline-flex; align-items:center; gap:3px; font-size:10.5px; font-weight:800; letter-spacing:.02em; padding:3px 9px; border-radius:8px; line-height:1.5; white-space:nowrap; backdrop-filter: blur(4px); }
+        .lang-badge svg { width:10px; height:10px; flex-shrink:0; }
+        .lang-badge-vs { background: rgba(94,96,112,0.95); color: #fff; }
+        .lang-badge-tm { background: rgba(44,163,93,0.95); color: #fff; }
+        .lang-badge-lt { background: rgba(59,130,246,0.95); color: #fff; }
+
+        /* ĐÃ GỠ BỎ (theo yêu cầu): .bilingual-ribbon (dải chéo góc cũ, suy đoán tự động >=2 loại ngôn
+           ngữ). Giờ badge "Song Ngữ" chỉ có 1 dạng duy nhất: pill tròn .bilingual-pill (xem bên dưới),
+           CHỈ hiện trong carousel "Phim Song Ngữ" admin tự thêm. */
+
+        /* THÊM MỚI (v14 - reskin theo ChoPhim): thanh chỉ báo tiến trình cuộn ngang dưới mỗi dòng
+           phim (chỉ hiện mobile, giống demo tham khảo). Track/thumb generic — không cần id riêng
+           cho từng dòng, JS tính theo cặp .row-scroll + .row-scroll-track kế tiếp nhau (xem script
+           cuối file, phần "Row scroll progress"). */
+        .row-scroll-track { display: none; }
+        @media (max-width: 1023px) {
+            .row-scroll-track { display: block; height: 4px; border-radius: 4px; background: rgba(255,255,255,0.08); margin-top: 10px; width: 56px; overflow: hidden; }
+            .row-scroll-thumb { height: 100%; width: 40%; border-radius: 4px; background: rgba(255,255,255,0.35); transition: transform 0.05s linear; }
+        }
+
+        /* ================= THÊM MỚI: 2 trạng thái khối thông tin hero =================
+           - Mặc định (ảnh tĩnh): logo to, căn giữa, đủ badge — giữ nguyên như cũ.
+           - .trailer-mode (lúc trailer đang phát): thu nhỏ, dạt xuống góc trái, chỉ còn badge
+             gọn (số tập/năm/HD); nút Xem phim thu nhỏ dạt góc phải. Có transition mượt khi đổi. */
+        .hero-info-wrap.trailer-mode {
+            align-items: flex-start;
+            text-align: left;
+            /* SỬA (v50): các cách cũ (width:92% rồi width:auto dựa vào px-4 gốc) đều dựa vào %/padding
+               gộp chung phức tạp, dễ tính sai lề trái-phải. Giờ khai báo THẲNG khoảng cách trái/phải
+               bằng "inset" cố định (left/right), tách hẳn khỏi padding gốc (px-4/md:px-10 tắt hẳn ở
+               chế độ này qua padding-left/right:0 bên dưới) -> lề trái và lề phải LUÔN đúng bằng đúng
+               số đã khai, không còn cộng dồn/lệch qua lại giữa 2 cơ chế nữa.
+            */
+            left: 1rem;
+            right: 1.5rem;
+            width: auto;
+            padding-left: 0;
+            padding-right: 0;
+            /* SỬA (v56): khung hero mobile giờ thấp hơn nhiều (đổi sang aspect-video 16:9 thay vì
+               4:3 cũ) -> giảm padding + khoảng cách đáy để cả khối nội dung không còn cao hơn khung,
+               tránh bị đẩy tràn lên trên (đè lên thanh nav phía trên hero). */
+            padding-top: 0.5rem;
+            padding-bottom: 0.75rem;
+            bottom: 1.5rem;
+        }
+        /* SỬA: ép căn trái + cho phép xuống dòng cho từng phần tử con (logo/tên phim/mô tả),
+           tránh trường hợp text bị line-clamp-1 cắt cụt/dính 1 dòng lệch phải trông như bị kẹt. */
+        .hero-info-wrap.trailer-mode .hero-info-logo,
+        .hero-info-wrap.trailer-mode h2,
+        .hero-info-wrap.trailer-mode p,
+        .hero-info-wrap.trailer-mode > div {
+            text-align: left;
+            align-self: flex-start;
+            margin-left: 0;
+            margin-right: auto;
+            /* SỬA LỖI: nếu chỉ đổi align-self mà không ép width, các phần tử này co theo kiểu
+               "vừa đủ nội dung" (fit-content) và có thể tràn ra ngoài cột thay vì xuống dòng sớm hơn.
+               Ép width:100% để chúng luôn bị khoá đúng trong cột (giờ cột = left/right inset ở trên),
+               bắt buộc phải wrap đúng trong khoảng đã định. */
+            width: 100%;
+            max-width: 100%;
+            box-sizing: border-box;
+        }
+        .hero-info-wrap.trailer-mode .hero-info-logo {
+            max-width: 130px; max-height: 34px;
+        }
+        .hero-secondary-name { color: #FECF59; }
+        /* THÊM MỚI (v56): riêng mobile — khung hero giờ chỉ còn ~16:9 (thấp hơn nhiều so với 4:3 cũ),
+           nên thu gọn thêm khối nội dung trailer-mode để không bị tràn lên trên: thu nhỏ tên tiếng
+           Việt (SỬA v58: không ẩn hẳn nữa vì đây là thông tin quan trọng, chỉ giảm cỡ chữ/khoảng cách),
+           thu nhỏ cỡ chữ tên phim (trước đây giữ nguyên text-2xl dù đang ở trailer-mode), và giảm mô
+           tả từ 3 dòng xuống 2 dòng. */
+        @media (max-width: 767px) {
+        .hero-info-wrap.trailer-mode .hero-secondary-name {
+                font-size: 0.75rem;
+                margin-bottom: 0.375rem;
+            }
+            .hero-info-wrap.trailer-mode h2 {
+                font-size: 1.05rem;
+                line-height: 1.3;
+                margin-bottom: 0.25rem;
+            }
+            .hero-info-wrap.trailer-mode .hero-desc-clamp {
+                -webkit-line-clamp: 2;
+            }
+        }
+        @media (min-width: 768px) {
+            .hero-info-wrap.trailer-mode { bottom: 4.25rem; left: 2.5rem; right: 3rem; }
+            .hero-info-wrap.trailer-mode .hero-info-logo { max-width: 190px; max-height: 46px; }
+        }
+        /* THÊM MỚI: lớp tối riêng phía sau khối thông tin lúc trailer phát, đảm bảo chữ luôn đọc
+           được dù nền video sáng/tối thất thường (khác nhau tuỳ trailer). */
+        .hero-scrim-playing {
+            opacity: 0;
+            transition: opacity 0.5s ease-out;
+            /* v54: tăng độ phủ tối (0.85->0.92, 0.5->0.6) để chữ mô tả luôn nổi rõ dù trailer
+               có đoạn nền sáng (da mặt, tóc sáng, trời sáng...) ngay chỗ đặt chữ. Không dùng khung/blur
+               riêng để giữ cảm giác cinematic, full-bleed của trailer. */
+            background: linear-gradient(0deg, rgba(0,0,0,0.92) 0%, rgba(0,0,0,0.6) 55%, transparent 90%);
+        }
+        .hero-scrim-playing.visible { opacity: 1; }
+
+        /* THÊM MỚI (v51): mô tả hero lúc trailer phát trước đây bị khoá cứng line-clamp-3 trên MỌI
+           kích thước màn hình -> dù width đã đúng 100% (v50), phần chữ dư vẫn bị cắt "…" vì giới hạn
+           SỐ DÒNG chứ không phải do thiếu bề ngang. Giờ tách riêng thành class có breakpoint: mobile
+           giữ 3 dòng (ít chỗ dọc, tránh đè lên logo/tên phim phía trên), desktop lên 5 dòng (nhiều
+           chỗ dọc hơn) để hiện được nhiều mô tả hơn trước khi phải cắt. */
+        .hero-desc-clamp { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
+        /* THÊM MỚI (v53): bóng đổ cho mô tả hero lúc trailer phát, giúp chữ nổi rõ trên nền ảnh sáng */
+        .hero-desc-shadow { text-shadow: 0 1px 2px rgba(0,0,0,.9), 0 2px 8px rgba(0,0,0,.6); }
+        @media (min-width: 768px) {
+            .hero-desc-clamp { -webkit-line-clamp: 5; }
+        }
+
+        /* ===== Toggle switch tròn (thay checkbox vuông ở ô "Có spoil") ===== */
+        .toggle-switch { position: relative; display:inline-block; width:34px; height:20px; flex-shrink:0; }
+        .toggle-switch input { opacity:0; width:0; height:0; }
+        .toggle-switch .toggle-track { position:absolute; inset:0; background: rgba(255,255,255,0.15); border-radius:999px; transition: background .2s; }
+        .toggle-switch .toggle-track::before { content:''; position:absolute; width:14px; height:14px; left:3px; top:3px; background:#fff; border-radius:50%; transition: transform .2s; }
+        .toggle-switch input:checked + .toggle-track { background: #FFC24B; }
+        .toggle-switch input:checked + .toggle-track::before { transform: translateX(14px); }
+
+        /* ===== LIQUID GLASS CSS =====
+           ĐỔI GIAO DIỆN (v8 - reskin theo ChoPhim): retint từ tím-xám sang navy đúng tông ChoPhim
+           (#12121a/#16161e), đồng thời tăng độ đục (giảm cảm giác "kính mờ") cho gần phẳng hơn.
+           Giữ NGUYÊN tên class + cấu trúc box-shadow/border vì đang dùng ở hàng chục modal/nút/nav
+           khác nhau -> chỉ đổi giá trị màu, không cần sửa markup nào. */
+        .liquid-glass {
+            background: rgba(18, 18, 26, 0.6);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+        }
+        
+        .liquid-glass-accent {
+            background: rgba(254, 207, 89, 0.92);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            box-shadow: 0 8px 25px rgba(254, 207, 89, 0.3);
+        }
+
+        /* THÊM MỚI: biến thể liquid glass "đục" hơn, dùng cho khu vực nhiều chữ/nằm đè lên nội dung
+           cuộn được (navbar, thanh hành động dưới, toast, dropdown...) để tránh bị mờ/khó đọc như
+           class .liquid-glass gốc (vốn hợp cho nút icon nổi trên ảnh/video hơn là vùng chữ). */
+        .liquid-glass-solid {
+            background: rgba(10, 10, 15, 0.95);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+        }
+
+        /* TỐI ƯU HIỆU NĂNG: navbar trên + bottom-nav dưới luôn "sống" trong lúc cuộn trang, nếu
+           dùng chung .liquid-glass-solid (có url(#liquid-distort) rất nặng vì phải tính lại mỗi
+           frame cuộn) sẽ khiến máy yếu bị giật. 2 khu vực này chỉ dùng blur thường, KHÔNG distort. */
+        .liquid-glass-nav {
+            background: rgba(10, 10, 15, 0.92);
+            border: 1px solid rgba(255, 255, 255, 0.08);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.45);
+        }
+
+        /* ================= THÊM MỚI: Thanh điều hướng dưới kiểu Liquid Glass =================
+           Lấy cảm hứng từ thanh tab-bar dưới của Telegram (Chat / Danh bạ / Cài đặt / Hồ sơ):
+           nền kính mờ (frosted glass) đục vừa đủ để đọc chữ, viền mảnh phía trên, icon+label
+           dạng cột, tab đang active chuyển màu primary. Chỉ hiện trên mobile (ẩn ở md trở lên
+           vì màn hình lớn đã có menu ngang/hamburger đầy đủ). */
+        /* THÊM MỚI: ẩn thanh cuộn ngang (dùng cho tab ngày ở view Lịch Chiếu) — Tailwind CDN
+           (không compile) không có sẵn utility này nên phải tự định nghĩa. */
+        .scrollbar-hide::-webkit-scrollbar { display: none; }
+        .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+        #bottom-nav {
+            padding-bottom: env(safe-area-inset-bottom, 0px);
+        }
+        /* ================= NETFLIX STYLE: bottom-nav dạng viên nang nổi, cách mép màn hình ================= */
+        #bottom-nav.netflix-pill-nav {
+            left: 14px; right: 14px; bottom: 14px;
+            border-radius: 9999px;
+            background: rgba(10, 10, 15, 0.92);
+            border: 1px solid rgba(255,255,255,0.06);
+            box-shadow: 0 10px 30px rgba(0,0,0,0.55);
+        }
+        /* Active item: icon + chữ trắng, không còn màu đỏ thương hiệu ở đây (giữ đỏ cho CTA/badge) */
+        .bottom-nav-btn.text-primary { color: #ffffff; }
+        .bottom-nav-btn {
+            -webkit-tap-highlight-color: transparent;
+            -webkit-appearance: none;
+            appearance: none;
+            background: transparent;
+            border: none;
+            outline: none;
+            position: relative;
+            overflow: hidden;
+            transition: transform 0.1s ease;
+            z-index: 1;
+        }
+        /* SỬA LỖI: nút Home có khối tròn nổi (.nav-home-fab, margin-top âm) đẩy lên cao hơn mép
+           trên của nút — nếu giữ overflow:hidden như các nút khác thì phần nhô lên bị "xén phẳng"
+           ngay tại viền nút, tạo hình bán nguyệt bị cắt xấu. Chỉ riêng nút Home cho tràn ra ngoài. */
+        .bottom-nav-btn[data-bnav="home"] { overflow: visible; }
+        .bottom-nav-btn:focus,
+        .bottom-nav-btn:focus-visible,
+        .bottom-nav-btn:active {
+            outline: none;
+            background: transparent;
+            box-shadow: none;
+        }
+        .bottom-nav-btn svg { transition: transform 0.1s ease; }
+        .bottom-nav-btn.text-primary svg { transform: translateY(-1px) scale(1.08); }
+        .bottom-nav-btn:active { transform: scale(0.93); }
+        .bottom-nav-btn:active svg { transform: scale(0.9); }
+
+
+        /* ================= THÊM MỚI: Nút Trang chủ nổi to, đè lên viền trên của bottom-nav
+           (kiểu FAB trung tâm — cảm hứng từ TikTok/Zalo) =================*/
+        .nav-home-fab {
+            width: 22px; height: 22px;
+            display: flex; align-items: center; justify-content: center;
+            color: inherit;
+            transition: transform 0.1s ease;
+        }
+        .bottom-nav-btn:active .nav-home-fab { transform: scale(0.92); }
+
+        /* ================= THÊM MỚI: Animation trượt mượt khi chuyển giữa các tab bằng vuốt/bấm ================= */
+        @keyframes tabSlideInRight { from { opacity: 0; transform: translateX(26px); } to { opacity: 1; transform: translateX(0); } }
+        @keyframes tabSlideInLeft { from { opacity: 0; transform: translateX(-26px); } to { opacity: 1; transform: translateX(0); } }
+        .tab-slide-in-right { animation: tabSlideInRight 0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
+        .tab-slide-in-left { animation: tabSlideInLeft 0.32s cubic-bezier(0.22, 1, 0.36, 1) both; }
+
+        /* ================= BIG UPDATE GIAO DIỆN (v96): bộ class dùng chung cho phong cách đa sắc =================
+           Áp dụng cho: pill thể loại trang chủ, badge trên poster, tiêu đề section xoay màu, nút CTA phát sáng. */
+
+        /* Pill thể loại lớn kiểu "Bạn đang quan tâm gì?" — mỗi thẻ 1 gradient riêng, lớp phủ tối nhẹ góc phải
+           để chữ luôn rõ dù ảnh/gradient sáng. */
+        .interest-pill {
+            position: relative;
+            overflow: hidden;
+            /* ĐỔI GIAO DIỆN (v11 - reskin theo ChoPhim): bo góc bất đối xứng kiểu "blob" thay vì bo
+               tròn đều 22px — đúng hình khối thẻ chủ đề trên ChoPhim. */
+            border-radius: 14px 38px 14px 38px;
+            padding: 18px 16px;
+            min-height: 92px;
+            display: flex;
+            align-items: flex-end;
+            font-weight: 800;
+            color: #fff;
+            box-shadow: 0 10px 24px -8px rgba(0,0,0,0.5);
+            transition: transform 0.2s ease;
+        }
+        .interest-pill:active { transform: scale(0.96); }
+        .interest-pill::after {
+            content: '';
+            position: absolute; inset: 0;
+            background: linear-gradient(135deg, rgba(0,0,0,0) 40%, rgba(0,0,0,0.25) 100%);
+            pointer-events: none;
+        }
+
+        /* ================= HERO BANNER (v1006): avatar tròn chọn slide thay cho dots ================= */
+        .hero-avatar {
+            width: 44px; height: 44px; border-radius: 9999px; overflow: hidden; flex-shrink: 0;
+            border: 2px solid transparent; cursor: pointer; transition: border-color .25s ease, transform .2s ease;
+            opacity: .55;
+        }
+        .hero-avatar.active { border-color: #FECF59; opacity: 1; transform: scale(1.06); box-shadow: 0 0 12px rgba(254,207,89,.45); }
+        .hero-avatar img { width: 100%; height: 100%; object-fit: cover; }
+        .hero-slide-item { transition: opacity .6s ease; }
+        .hero-tag-new { background: #34d399; color: #052e1f; }
+        .hero-tag-hot { background: #fb7185; color: #3f0a15; }
+        .hero-tag-admin { background: #FECF59; color: #3f2d05; }
+
+        /* Badge trạng thái trên poster (Full / Tập N / Đã xem / Sắp chiếu) — màu theo ý nghĩa,
+           không còn 1 màu vàng cố định như bản cũ, giúp quét thông tin nhanh hơn. */
+        .status-pill {
+            display: inline-block;
+            font-size: 10px;
+            font-weight: 800;
+            padding: 3px 8px;
+            border-radius: 999px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.35);
+        }
+        .status-pill-full { background: rgba(245,158,11,0.92); color: #1a1305; }
+        .status-pill-ep { background: rgba(252,211,77,0.92); color: #1a1305; }
+        .status-pill-watched { background: rgba(52,211,153,0.92); color: #052e21; }
+        .status-pill-default { background: rgba(148,163,184,0.9); color: #15141F; }
+
+        /* Tiêu đề section xoay qua bảng màu đa sắc (dùng data-accent để CSS tô màu, JS chỉ gán số 0-5) */
+        /* ĐỔI GIAO DIỆN (v11 - reskin theo ChoPhim): chuyển từ "màu chữ đặc + text-shadow glow" sang
+           GRADIENT CHỮ THẬT (background-clip:text) — đúng kiểu tiêu đề "Phim Hàn Quốc mới"/"Phim Trung
+           Quốc mới" trên ChoPhim. Giữ nguyên data-accent 0-5 và Utils.accentColorIndex() y hệt, chỉ đổi
+           cách tô màu nên không cần sửa bất kỳ chỗ nào đang gọi class/hàm này. */
+        .section-title-accent {
+            background-repeat: no-repeat;
+            -webkit-background-clip: text;
+            background-clip: text;
+            color: transparent;
+        }
+        .section-title-accent[data-accent="0"] { background-image: linear-gradient(90deg, #ffe08a 0%, #FECF59 60%, #f0b429 100%); filter: drop-shadow(0 0 14px rgba(254,207,89,.35)); }
+        .section-title-accent[data-accent="1"] { background-image: linear-gradient(90deg, #fecdd3 0%, #fb7185 60%, #e11d48 100%); filter: drop-shadow(0 0 14px rgba(251,113,133,.35)); }
+        .section-title-accent[data-accent="2"] { background-image: linear-gradient(90deg, #bae6fd 0%, #38bdf8 60%, #0284c7 100%); filter: drop-shadow(0 0 14px rgba(56,189,248,.35)); }
+        .section-title-accent[data-accent="3"] { background-image: linear-gradient(90deg, #ddd6fe 0%, #a78bfa 60%, #7c3aed 100%); filter: drop-shadow(0 0 14px rgba(167,139,250,.35)); }
+        .section-title-accent[data-accent="4"] { background-image: linear-gradient(90deg, #bbf7d0 0%, #34d399 60%, #059669 100%); filter: drop-shadow(0 0 14px rgba(52,211,153,.35)); }
+        .section-title-accent[data-accent="5"] { background-image: linear-gradient(90deg, #f5d0fe 0%, #e879f9 60%, #c026d3 100%); filter: drop-shadow(0 0 14px rgba(232,121,249,.35)); }
+
+        /* THÊM MỚI: section "Phim Song Ngữ" (danh sách admin tự tay xác nhận qua Control Panel,
+           endpoint /bilingual-override) — CSS RIÊNG, không tái dùng .section-title-accent để không
+           ảnh hưởng các nơi khác đang dùng class đó. (.bilingual-ribbon cũ đã bị gỡ bỏ hoàn toàn theo
+           yêu cầu — badge "Song Ngữ" giờ chỉ còn đúng 1 dạng: pill này, chỉ hiện ở đây.) */
+        .bilingual-section-card {
+            position: relative; overflow: hidden; border-radius: 28px;
+            background: radial-gradient(120% 160% at 15% 0%, rgba(124,58,237,0.20) 0%, rgba(15,15,20,0) 55%), #121218;
+            border: 1px solid rgba(255,255,255,0.06);
+        }
+        .bilingual-title-gradient {
+            background-image: linear-gradient(90deg, #fde68a 0%, #fcd34d 35%, #93e8f7 75%, #67e8f9 100%);
+            -webkit-background-clip: text; background-clip: text; color: transparent;
+        }
+        /* Pill "🔤 Song Ngữ" góc trên-trái poster — CHỈ dùng trong carousel của section này. Pill
+           này chỉ gắn cho phim admin đã tự tay xác nhận có bản vsmov song ngữ thật; ribbon chéo góc
+           cũ (suy đoán tự động) đã bị gỡ bỏ hoàn toàn khỏi mọi nơi khác. */
+        .bilingual-pill {
+            position: absolute; top: 8px; left: 8px; z-index: 11;
+            display: inline-flex; align-items: center; gap: 4px;
+            padding: 4px 10px; border-radius: 999px;
+            font-size: 10.5px; font-weight: 800; color: #fff; white-space: nowrap;
+            background: rgba(124,58,237,0.92); backdrop-filter: blur(4px);
+            box-shadow: 0 3px 8px -2px rgba(0,0,0,0.45);
+        }
+        .bilingual-pill svg { width: 11px; height: 11px; flex-shrink: 0; }
+
+        /* THÊM MỚI: glow dùng chung cho các heading lớn khác ngoài tiêu đề dòng phim (tên phim ở
+        trang chi tiết, tên diễn viên...) — tông vàng theo màu chủ đạo của app thay vì theo accent
+        xoay vòng, vì đây là heading đơn lẻ không thuộc hệ thống nhiều màu như dòng phim. */
+        .heading-glow-gold { text-shadow: 0 0 22px rgba(255,194,75,.35), 0 2px 8px rgba(0,0,0,.55); }
+
+        /* Nút CTA phát sáng kiểu "Xem ngay" — gradient vàng ấm + glow đậm hơn bản cũ */
+        .cta-glow {
+            background: linear-gradient(135deg, #fde68a 0%, #FFC24B 45%, #f59e0b 100%);
+            box-shadow: 0 12px 30px -6px rgba(252,211,77,0.55), 0 0 0 1px rgba(255,255,255,0.15) inset;
+        }
+        .cta-glow:active { transform: scale(0.97); }
+
+        /* ================= THÊM MỚI: Thẻ Playlist kiểu Netflix (collage 4 ảnh + tên + số lượng) ================= */
+        .playlist-collage-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            grid-template-rows: 1fr 1fr;
+            gap: 1px;
+        }
+        /* ================= THÊM MỚI: Player tuỳ chỉnh (thay control mặc định của trình duyệt) ================= */
+        #kt-player-wrap { user-select: none; }
+        #kt-player-wrap video { -webkit-user-select: none; }
+
+        .kt-overlay {
+            position: absolute; inset: 0; z-index: 10;
+            display: flex; flex-direction: column; justify-content: space-between;
+            background: linear-gradient(to bottom, rgba(0,0,0,.55) 0%, rgba(0,0,0,0) 22%, rgba(0,0,0,0) 60%, rgba(0,0,0,.65) 100%);
+            opacity: 1; transition: opacity .25s ease;
+            padding: 14px 16px 10px;
+        }
+        .kt-overlay.hidden { opacity: 0; pointer-events: none; }
+
+        .kt-top-row {
+            display: flex; align-items: center; justify-content: space-between; gap: 12px;
+            font-size: 14px; font-weight: 700; text-shadow: 0 1px 4px rgba(0,0,0,.6); padding-left: 46px;
+        }
+        .kt-top-title { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+        /* THÊM MỚI (v103): nút "Danh sách tập" giờ nằm ở góc trên cạnh tiêu đề (icon + chữ), thay
+           vì icon-only ở hàng dưới cùng — vẫn CHỈ hiện khi fullscreen (JS toggle không đổi). */
+        .kt-eplist-toprow-btn {
+            display: flex; align-items: center; gap: 6px; background: none; border: none; color: #fff;
+            cursor: pointer; font-size: 13px; font-weight: 700; text-shadow: 0 1px 4px rgba(0,0,0,.6);
+            flex-shrink: 0; padding: 4px 2px; pointer-events: auto;
+        }
+        .kt-eplist-toprow-btn svg { width: 20px; height: 20px; }
+        .kt-eplist-toprow-btn:active { opacity: .7; }
+
+        .kt-center-controls {
+            position: absolute; inset: 0;
+            display: flex; align-items: center; justify-content: center; gap: 46px;
+            pointer-events: none;
+        }
+        .kt-center-btn {
+            background: none; border: none; color: #fff; cursor: pointer;
+            display: flex; align-items: center; justify-content: center;
+            filter: drop-shadow(0 2px 6px rgba(0,0,0,.5));
+            opacity: .95; position: relative;
+            pointer-events: auto;
+        }
+        .kt-center-btn svg { width: 30px; height: 30px; }
+        .kt-center-btn.kt-play-pause svg { width: 42px; height: 42px; }
+        .kt-center-btn:active { transform: scale(0.9); }
+        .kt-skip-label { position: absolute; font-size: 9px; font-weight: 700; top: 62%; left: 50%; transform: translateX(-50%); }
+
+        .kt-bottom { display: flex; flex-direction: column; gap: 6px; }
+
+        .kt-seek-row { display: flex; align-items: center; gap: 10px; font-variant-numeric: tabular-nums; }
+        .kt-time { font-size: 11px; color: #eaeaea; min-width: 34px; text-shadow: 0 1px 3px rgba(0,0,0,.6); }
+        .kt-time-end { text-align: right; }
+
+        .kt-seek-bar { flex: 1; position: relative; height: 16px; display: flex; align-items: center; cursor: pointer; }
+        .kt-seek-track { position: relative; width: 100%; height: 3px; background: rgba(255,255,255,.28); border-radius: 3px; }
+        .kt-seek-buffered { position: absolute; left:0; top:0; height: 100%; background: rgba(255,255,255,.4); border-radius: 3px; }
+        .kt-seek-fill { position: absolute; left:0; top:0; height: 100%; background: #FFC24B; border-radius: 3px; }
+        .kt-seek-thumb {
+            position: absolute; top: 50%; width: 12px; height: 12px; background: #fff; border-radius: 50%;
+            transform: translate(-50%, -50%); box-shadow: 0 1px 4px rgba(0,0,0,.5);
+        }
+
+        .kt-controls-row { display: flex; align-items: center; justify-content: space-between; }
+        .kt-controls-left, .kt-controls-right { display: flex; align-items: center; gap: 16px; }
+        .kt-icon-btn {
+            background: none; border: none; color: #fff; cursor: pointer; padding: 4px;
+            display: flex; align-items: center; justify-content: center; opacity: .95;
+        }
+        .kt-icon-btn svg { width: 19px; height: 19px; }
+        .kt-icon-btn:active { transform: scale(0.88); }
+        .kt-icon-btn.kt-fit-active { color: #FFC24B; }
+        .kt-next-label { font-size: 12px; color: #ddd; font-weight: 600; }
+
+        .kt-divider { width: 1px; height: 18px; background: rgba(255,255,255,.25); }
+
+        .kt-menu {
+            position: absolute; bottom: 46px; right: 14px; z-index: 20;
+            background: rgba(28,28,32,.92);            border: 1px solid rgba(255,255,255,.1);
+            border-radius: 10px; padding: 6px; min-width: 150px;
+            display: none; flex-direction: column; gap: 2px;
+            box-shadow: 0 10px 30px rgba(0,0,0,.5);
+        }
+        /* THÊM MỚI (v29): menu CC rộng hơn menu thường (150px) một chút để chứa vừa thanh trượt cỡ chữ. */
+        #kt-cc-menu { min-width: 190px; }
+        .kt-menu.open { display: flex; }
+        .kt-menu .kt-menu-label { font-size: 10px; color: #999; padding: 6px 10px 2px; text-transform: uppercase; letter-spacing: .5px; }
+        .kt-menu button {
+            background: none; border: none; color: #eee; text-align: left; padding: 7px 10px;
+            border-radius: 6px; font-size: 13px; cursor: pointer;
+        }
+        .kt-menu button.active { background: rgba(252,211,77,.18); color: #FFC24B; font-weight: 700; }
+        .kt-menu button:active { background: rgba(255,255,255,.08); }
+
+        .kt-center-loading { position: absolute; inset: 0; z-index: 9; display: flex; align-items: center; justify-content: center; pointer-events: none; }
+        .kt-spinner {
+            width: 32px; height: 32px; border-radius: 50%;
+            border: 3px solid rgba(255,255,255,.25); border-top-color: #fff;
+            animation: kt-spin .8s linear infinite; display: none;
+        }
+        @keyframes kt-spin { to { transform: rotate(360deg); } }
+
+        /* THÊM MỚI (v101): hiệu ứng feedback khi double-tap ±10s hai bên video */
+        .kt-tap-feedback {
+            position: absolute; top: 50%; transform: translateY(-50%);
+            display: flex; flex-direction: column; align-items: center; gap: 4px;
+            background: rgba(0,0,0,.55); color: #fff; border-radius: 50%;
+            width: 76px; height: 76px; justify-content: center;
+            font-size: 12px; font-weight: 700; z-index: 25;
+            opacity: 0; pointer-events: none; transition: opacity .25s ease;
+        }
+        .kt-tap-feedback.show { opacity: 1; transition: none; }
+        .kt-tap-feedback svg { width: 24px; height: 24px; }
+        .kt-tap-feedback.kt-tap-left { left: 14%; }
+        .kt-tap-feedback.kt-tap-right { right: 14%; }
+
+        /* THÊM MỚI (v101): nút mute/volume dùng chung style kt-icon-btn, chỉ đổi icon on/off */
+        .kt-icon-btn.kt-volume-active { color: #FFC24B; }
+
+        /* THÊM MỚI (v104): nút CC (phụ đề) — dùng chung style active với volume. Style phụ đề
+           (cỡ chữ/màu/nền) điều khiển qua CSS variable đặt trên #kt-player-wrap, kế thừa xuống
+           video::cue (hỗ trợ tốt trên Chrome/Edge/Firefox, Safari hỗ trợ 1 phần cơ bản).
+           SỬA (v30): đổi font mặc định từ "inherit" (ăn theo font trang, có thể mảnh/khó đọc trên nền
+           video) sang bộ font đậm (font-weight: 700) + thêm text-shadow làm viền chữ mờ — giống kiểu
+           phụ đề đậm/rõ nét phổ biến trên các web xem phim khác. text-shadow là thuộc tính ::cue CHO
+           PHÉP theo spec WebVTT (khác các thuộc tính khác như position/margin không hỗ trợ). */
+        .kt-icon-btn.kt-cc-active { color: #FFC24B; }
+        #kt-player-wrap video::cue {
+            font-size: var(--kt-sub-size, 18px);
+            color: var(--kt-sub-color, #FFFFFF);
+            background: var(--kt-sub-bg, rgba(0,0,0,.75));
+            font-family: var(--kt-sub-font, 'Inter', 'Helvetica Neue', Arial, sans-serif);
+            font-weight: 700;
+            text-shadow: 0 1px 3px rgba(0,0,0,.9), 0 0 6px rgba(0,0,0,.7), 0 2px 10px rgba(0,0,0,.6);
+        }
+        /* THÊM MỚI (v29): thanh trượt cỡ chữ phụ đề ngay trong menu CC (kt-cc-menu), cho phép chỉnh
+           nhanh 14-32px (bước 2px) mà không cần vào Cài đặt. Style tối giản, đồng bộ theme menu tối. */
+        .kt-cc-size-row { display: flex; align-items: center; gap: 8px; padding: 4px 10px 8px; }
+        .kt-cc-size-row input[type="range"] {
+            flex: 1; -webkit-appearance: none; appearance: none; height: 3px; border-radius: 3px;
+            background: rgba(255,255,255,.2); outline: none; cursor: pointer;
+        }
+        .kt-cc-size-row input[type="range"]::-webkit-slider-thumb {
+            -webkit-appearance: none; appearance: none; width: 14px; height: 14px; border-radius: 50%;
+            background: #FFC24B; cursor: pointer; border: 2px solid rgba(0,0,0,.3);
+        }
+        .kt-cc-size-row input[type="range"]::-moz-range-thumb {
+            width: 14px; height: 14px; border-radius: 50%; background: #FFC24B; cursor: pointer; border: 2px solid rgba(0,0,0,.3);
+        }
+        .kt-cc-size-row span { font-size: 12px; color: #ddd; font-weight: 700; min-width: 32px; text-align: right; }
+        /* THÊM MỚI (v34): thanh "Đồng bộ" (offset lệch sub) — tái dùng layout .kt-cc-size-row, chỉ
+           chỉnh riêng độ rộng label (số kèm dấu +/- dài hơn cỡ chữ, vd "+10.0s") và style nút 🎯 chỉnh mịn. */
+        .kt-cc-offset-row span { min-width: 44px; }
+        #kt-cc-offset-fine-toggle {
+            background: rgba(255,255,255,.1); border: none; border-radius: 6px; width: 24px; height: 24px;
+            font-size: 12px; line-height: 1; cursor: pointer; flex-shrink: 0; opacity: .6; transition: opacity .15s, background .15s;
+        }
+        #kt-cc-offset-fine-toggle.kt-cc-offset-fine-active { opacity: 1; background: #FFC24B; }
+        .kt-settings-label { font-size: 10px; color: #999; padding: 8px 10px 2px; text-transform: uppercase; letter-spacing: .5px; }
+        /* THÊM MỚI (v37): style cho danh sách transcript trong trang Đồng bộ phụ đề.
+           - .kt-sync-line: dòng mặc định.
+           - .kt-sync-line-playing: dòng đang khớp video.currentTime (tự động, theo dõi khi phát).
+           - .kt-sync-line-picked: dòng đã long-press chọn làm mốc đồng bộ (viền vàng, giữ tới khi đổi/đóng trang). */
+        #kt-sync-page { display: none; flex-direction: column; }
+        #kt-sync-page.kt-sync-open { display: flex; }
+        .kt-sync-line {
+            padding: 10px 14px; border-left: 3px solid transparent; cursor: pointer;
+            -webkit-user-select: none; user-select: none; -webkit-tap-highlight-color: transparent;
+        }
+        .kt-sync-line-time { font-size: 10px; color: #888; display: block; margin-bottom: 2px; font-variant-numeric: tabular-nums; }
+        .kt-sync-line-text { font-size: 14px; color: #ddd; line-height: 1.4; }
+        .kt-sync-line-playing { background: rgba(254,207,89,.08); border-left-color: rgba(254,207,89,.4); }
+        .kt-sync-line-playing .kt-sync-line-text { color: #fff; }
+        .kt-sync-line-picked { border-left-color: #FECF59; background: rgba(254,207,89,.14); }
+        .kt-sync-line-picked .kt-sync-line-time { color: #FECF59; }
+        /* THÊM MỚI (v29): kẻ phân cách nhẹ phía trên mỗi mục (trừ mục đầu) trong màn Tuỳ chỉnh phụ đề,
+           giúp phân biệt rõ Cỡ chữ / Màu chữ / Nền chữ / Vị trí / Phông chữ khi cuộn xuống. */
+        #kt-settings-screen-subtitle .kt-settings-label:not(:first-of-type) {
+            margin-top: 6px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.08);
+        }
+        .kt-settings-screen button[data-sub-color] { display: inline-flex; align-items: center; gap: 6px; }
+        .kt-settings-screen button[data-sub-color]::before {
+            content: ''; width: 12px; height: 12px; border-radius: 50%; border: 1px solid rgba(255,255,255,.3);
+            background: currentColor; display: inline-block;
+        }
+
+        /* SỬA (v103): overlay danh sách tập đổi từ dạng che kín (inset:0, lưới nhiều cột) sang
+           side-panel trượt từ phải, chiếm ~1/3 chiều rộng, danh sách xếp dọc 1 cột — giống layout
+           tham khảo. Video vẫn thấy được phần bên trái khi panel mở. */
+        .kt-ep-overlay {
+            position: absolute; top: 0; right: 0; bottom: 0; z-index: 30;
+            width: 34%; min-width: 240px; max-width: 380px;
+            background: rgba(10,10,14,.97);
+            display: none; flex-direction: column;
+            padding: 14px 14px;
+            border-left: 1px solid rgba(255,255,255,.08);
+            box-shadow: -12px 0 30px rgba(0,0,0,.45);
+        }
+        .kt-ep-overlay.open { display: flex; }
+        .kt-ep-overlay-header {
+            display: flex; align-items: center; justify-content: space-between;
+            padding-bottom: 10px; border-bottom: 1px solid rgba(255,255,255,.1); margin-bottom: 10px; flex-shrink: 0;
+        }
+        .kt-ep-overlay-header h3 { color: #fff; font-size: 15px; font-weight: 800; }
+        .kt-ep-overlay-close {
+            background: rgba(255,255,255,.08); border: none; color: #fff; width: 28px; height: 28px;
+            border-radius: 50%; display: flex; align-items: center; justify-content: center; cursor: pointer;
+        }
+        /* SỬA (v103): danh sách giờ là 1 cột dọc (thumbnail trái + tên/mô tả phải) thay vì lưới. */
+        .kt-ep-grid { flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; padding-bottom: 10px; }
+        .kt-ep-item {
+            cursor: pointer; text-align: left; background: none; border: 1px solid transparent;
+            border-radius: 8px; padding: 6px; display: flex; gap: 10px; align-items: flex-start;
+        }
+        .kt-ep-item.active { background: rgba(255,194,75,.1); border-color: rgba(255,194,75,.35); }
+        .kt-ep-item .kt-ep-thumb {
+            position: relative; width: 112px; flex-shrink: 0; aspect-ratio: 16/9; border-radius: 8px; overflow: hidden;
+            background: #1c1f2e; border: 2px solid transparent;
+        }
+        .kt-ep-item.active .kt-ep-thumb { border-color: #FFC24B; }
+        .kt-ep-item .kt-ep-thumb img { width: 100%; height: 100%; object-fit: cover; display: block; }
+        .kt-ep-item .kt-ep-thumb .kt-ep-playing {
+            position: absolute; inset: 0; background: rgba(0,0,0,.4);
+            display: flex; align-items: center; justify-content: center;
+        }
+        .kt-ep-item .kt-ep-info { min-width: 0; flex: 1; }
+        .kt-ep-item .kt-ep-name { color: #eee; font-size: 12.5px; font-weight: 700; line-height: 1.3; }
+        .kt-ep-item.active .kt-ep-name { color: #FFC24B; }
+        /* THÊM MỚI (v103): mô tả ngắn mỗi tập (nếu có), giới hạn 2 dòng bằng line-clamp */
+        .kt-ep-item .kt-ep-mini-desc {
+            color: #9a9ba3; font-size: 11px; line-height: 1.4; margin-top: 3px;
+            display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+        }
+
+        /* SỬA (v102): menu Cài đặt 2 cấp — rộng hơn menu cũ để chứa dòng label + giá trị hiện tại */
+        .kt-menu-settings { min-width: 210px; padding: 4px; }
+        .kt-settings-screen { display: flex; flex-direction: column; gap: 2px; }
+        .kt-settings-screen.hidden { display: none; }
+        .kt-settings-row {
+            display: flex; align-items: center; justify-content: space-between;
+            background: none; border: none; color: #eee; text-align: left;
+            padding: 9px 10px; border-radius: 6px; font-size: 13px; font-weight: 600; cursor: pointer;
+        }
+        .kt-settings-row:active { background: rgba(255,255,255,.08); }
+        .kt-settings-row-value { color: #999; font-weight: 500; font-size: 12px; display: flex; align-items: center; gap: 3px; }
+        .kt-settings-back {
+            background: none; border: none; color: #FFC24B; text-align: left; font-weight: 700;
+            padding: 7px 10px 9px; font-size: 13px; cursor: pointer; border-bottom: 1px solid rgba(255,255,255,.08); margin-bottom: 4px;
+        }
+        /* THÊM MỚI (v29): màn "Tuỳ chỉnh phụ đề" gộp nhiều mục (cỡ chữ/màu/nền/vị trí/phông) nên dễ
+           bị dài quá, tràn che các nút khác của player. Giới hạn chiều cao + cho cuộn dọc bên trong;
+           nút "‹ quay lại" ghim cố định trên đầu (position: sticky) để cuộn xuống vẫn thấy đường về. */
+        #kt-settings-screen-subtitle {
+            max-height: min(58vh, 320px);
+            overflow-y: auto;
+            -webkit-overflow-scrolling: touch;
+        }
+        #kt-settings-screen-subtitle .kt-settings-back {
+            position: sticky; top: 0; z-index: 1; background: rgba(28,28,32,.98);
+        }
+        #kt-settings-screen-subtitle::-webkit-scrollbar { width: 4px; }
+        #kt-settings-screen-subtitle::-webkit-scrollbar-thumb { background: rgba(255,255,255,.18); border-radius: 4px; }
+    
